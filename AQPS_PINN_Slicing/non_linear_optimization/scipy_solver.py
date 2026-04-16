@@ -56,19 +56,22 @@ class MathSolver:
 
         # 约束二: 分配给每个切片的处理能力 mu 必须大于其流量 lambda
         def constraint_capacity(Q):
-            return (Q * self.mu_max) - lambdas - 1.0
+            return (Q * self.mu_max) - lambdas - 1e-3
 
-        bounds = [(0.01, 0.99) for _ in range(n_slices)]
+        bounds = [(1e-5, 0.999) for _ in range(n_slices)]
         constraints = [
             {'type': 'eq', 'fun': constraint_sum},
             {'type': 'ineq', 'fun': constraint_capacity}
         ]
 
-        # 不提供初始解，冷启动，按流量比例盲目分配
-        if initial_Q is None:
-            initial_Q = lambdas / (np.sum(lambdas) + 1e-9)
-            initial_Q = np.clip(initial_Q, 0.01, 0.99)
-            initial_Q = initial_Q / np.sum(initial_Q)
+        min_Q_needed = (lambdas + 0.1) / self.mu_max
+        remaining_Q = 1.0 - np.sum(min_Q_needed)
+
+        if remaining_Q <= 0:
+            initial_Q = lambdas / np.sum(lambdas)
+        else:
+            weights = np.sqrt(psis * lambdas)
+            initial_Q = min_Q_needed + remaining_Q * (weights / np.sum(weights))
 
         start_time = time.perf_counter()
 
@@ -79,7 +82,7 @@ class MathSolver:
             method='SLSQP',
             bounds=bounds,
             constraints=constraints,
-            options={'maxiter': 1000, 'ftol': 1e-5},
+            options={'maxiter': 10000, 'ftol': 1e-6},
         )
 
         cost_time_ms = (time.perf_counter() - start_time) * 1000.0
@@ -105,9 +108,9 @@ if __name__ == "__main__":
     simulator = TrafficSimulator(config_path)
     solver = MathSolver(config_path)
 
-    # 模拟生成一组 8 个切片的数据
-    traffic_data = simulator.generate_dynamic_slices(8)
-    print(f"\n[考卷] 生成 8 个切片，总流量 Σλ = {np.sum(traffic_data['lambdas']):.2f} / 1720")
+    # 模拟生成一组 64 个切片的数据
+    traffic_data = simulator.generate_dynamic_slices(64)
+    print(f"\n[考卷] 生成 64 个切片，总流量 Σλ = {np.sum(traffic_data['lambdas']):.2f} / 1720")
 
     # 让数学优化器做题
     print("\n[解题] 传统数学优化器(IPOPT/SLSQP)正在暴力搜索最优解...")
