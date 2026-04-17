@@ -2,7 +2,7 @@
   "system_parameters": {
     "description": "基于论文1硬件测试床（PC Engines APU2D4）的物理参数",
     "mu_max": 1720.0,
-    "airtime_needed_avg_us": 12000.0,
+    "airtime_needed_avg_us": 581.0,
     "reconfig_deadline_ms": 80.0,
     "epsilon": 0.1
   },
@@ -26,8 +26,11 @@
     }
   },
   "scalability_settings": {
-    "description": "用于测试从3个切片扩展到64个切片的性能",
-    "test_slice_counts": [3, 8, 16, 32, 64]
+    "description": "用于测试从2个切片扩展到64个切片的性能",
+    "test_slice_counts": [2,  4,  6,  8,  10, 12, 14, 16,
+                          18, 20, 22, 24, 26, 28, 30, 32,
+                          34, 36, 38, 40, 42, 44, 46, 48,
+                          50, 52, 54, 56, 58, 60, 62, 64]
   },
   "traffic_simulation": {
     "description": "流量生成边界参数",
@@ -38,10 +41,10 @@
   },
   "training_hyperparameters": {
     "description": "PINN模型训练参数",
-    "num_train_samples": 2000,
-    "num_test_samples": 500,
-    "epochs": 150,
-    "learning_rate": 0.005,
-    "alpha_qos": 0.1
+    "num_train_samples": 100000,
+    "num_test_samples": 10000,
+    "epochs": 400,
+    "learning_rate": 0.001,
+    "alpha_qos": 0.001
   }
 }
