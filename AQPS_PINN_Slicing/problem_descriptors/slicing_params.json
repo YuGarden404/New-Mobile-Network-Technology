@@ -1,6 +1,6 @@
 {
   "system_parameters": {
-    "description": "基于论文1硬件测试床（PC Engines APU2D4）的物理参数",
+    "description": "基于论文 Airtime-Based Resource Allocation Modeling for Network Slicing in IEEE 802.11 RANs 硬件测试床（PC Engines APU2D4）的物理参数",
     "mu_max": 1720.0,
     "airtime_needed_avg_us": 581.0,
     "reconfig_deadline_ms": 80.0,
