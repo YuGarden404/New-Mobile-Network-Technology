@@ -43,6 +43,7 @@ class MathSolver:
         """
         lambdas = traffic_data['lambdas']
         psis = traffic_data['psis']
+        etas = traffic_data['etas']
         n_slices = len(lambdas)
 
         def objective(Q):
@@ -58,10 +59,16 @@ class MathSolver:
         def constraint_capacity(Q):
             return (Q * self.mu_max) - lambdas - 1e-3
 
+        # 约束三: 硬性 QoS 时延约束，etas (时延上限) - delays (实际时延) >= 0
+        def constraint_qos(Q):
+            delays = self._compute_delay_ms(Q, lambdas)
+            return etas - delays
+
         bounds = [(1e-5, 0.999) for _ in range(n_slices)]
         constraints = [
             {'type': 'eq', 'fun': constraint_sum},
-            {'type': 'ineq', 'fun': constraint_capacity}
+            {'type': 'ineq', 'fun': constraint_capacity},
+            {'type': 'ineq', 'fun': constraint_qos}
         ]
 
         min_Q_needed = (lambdas + 0.1) / self.mu_max
@@ -91,7 +98,7 @@ class MathSolver:
             'Q_opt': res.x if res.success else initial_Q,   # 返回最优资源分配比例或兜底解
             'success': res.success,                         # 是否成功找到最优解
             'solve_time_ms': cost_time_ms,                  # 求解耗时
-            'iterations': res.nit                           # 迭代次数
+            'iterations': getattr(res, 'nit', 0)            # 迭代次数
         }
 
 
@@ -108,9 +115,9 @@ if __name__ == "__main__":
     simulator = TrafficSimulator(config_path)
     solver = MathSolver(config_path)
 
-    # 模拟生成一组 64 个切片的数据
-    traffic_data = simulator.generate_dynamic_slices(64)
-    print(f"\n[考卷] 生成 64 个切片，总流量 Σλ = {np.sum(traffic_data['lambdas']):.2f} / 1720")
+    # 模拟生成一组 8 个切片的数据
+    traffic_data = simulator.generate_dynamic_slices(8)
+    print(f"\n[考卷] 生成 8 个切片，总流量 Σλ = {np.sum(traffic_data['lambdas']):.2f} / 1720")
 
     # 让数学优化器做题
     print("\n[解题] 传统数学优化器(IPOPT/SLSQP)正在暴力搜索最优解...")
