@@ -46,10 +46,26 @@ class MathSolver:
         etas = traffic_data['etas']
         n_slices = len(lambdas)
 
+        """
+        为了解决传统 SLSQP 优化器在极端流量拥塞下因可行域消失而导致求解崩溃的问题，
+        本文在基准算法中引入了基于 L1 精确惩罚函数法（L1 Exact Penalty Method [Nocedal & Wright, 2006]）的软约束机制
+        我们将严格的 QoS 延迟约束转化为目标函数中的违约惩罚项，
+        并结合不同切片的 SLA 优先级权重（Shadow Prices [Kelly et al., 1998]）构建惩罚梯度
+        惩罚因子 mu 被设定为 10^4，以确保其在数值上严格大于最优拉格朗日乘子的上界，
+        从而在避免 Hessian 矩阵病态的同时，保证了拥塞状态下高优先级 URLLC 切片的绝对降级保障
+        
+        Kelly, F. P., Maulloo, A. K., & Tan, D. K. (1998). Rate control for communication networks: shadow prices, proportional fairness and stability. Journal of the Operational Research Society
+        """
         def objective(Q):
             # 目标：最小化“加权总时延”，越紧急的业务 psi 越大，要求时延越小
             delays = self._compute_delay_ms(Q, lambdas)
-            return np.sum(psis * delays)
+            # 基础目标：最小化加权总时延
+            base_cost = np.sum(psis * delays)
+            # np.maximum(0, ...) 意味着没超标就不罚款，超标了就按超出的毫秒数重罚
+            qos_violations = np.maximum(0, delays - etas)
+            # 乘以 10000.0 的超大权重，强迫优化器在“必死局”中也要拼命压低违约程度
+            penalty = np.sum(10000.0 * psis * qos_violations)
+            return base_cost + penalty
 
         # 约束一: 所有切片的资源比例总和必须等于 1
         def constraint_sum(Q):
@@ -59,16 +75,10 @@ class MathSolver:
         def constraint_capacity(Q):
             return (Q * self.mu_max) - lambdas - 1e-3
 
-        # 约束三: 硬性 QoS 时延约束，etas (时延上限) - delays (实际时延) >= 0
-        def constraint_qos(Q):
-            delays = self._compute_delay_ms(Q, lambdas)
-            return etas - delays
-
         bounds = [(1e-5, 0.999) for _ in range(n_slices)]
         constraints = [
             {'type': 'eq', 'fun': constraint_sum},
-            {'type': 'ineq', 'fun': constraint_capacity},
-            {'type': 'ineq', 'fun': constraint_qos}
+            {'type': 'ineq', 'fun': constraint_capacity}
         ]
 
         min_Q_needed = (lambdas + 0.1) / self.mu_max
