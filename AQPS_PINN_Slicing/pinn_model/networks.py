@@ -40,19 +40,16 @@ class AQPS_PINN(nn.Module):
         :param x: 输入张量，形状为 (batch_size, 256)
         :param mask: 掩码张量 (1表示该切片活跃，0表示该切片为空/填充位)
         """
-        # 1. 提取高维通用特征
+        # 形状对齐：将 [N, 4, max_slices] 展平为 [N, 4 * max_slices] = [N, 256]
+        x_flat = x.view(x.size(0), -1)
         features = self.shared_net(x)
 
-        # 2. 输出各个切片的资源分配 Logits
         logits = self.logits_layer(features)
 
-        # 3. 动态掩码处理 (Masking)
-        # 屏蔽那些用 0 填充的假切片
         if mask is not None:
             logits = logits.masked_fill(mask == 0, -1e9) # 负无穷
 
-        # 4. 可行解映射层 (Feasible Solution Mapping Layer)
-        # 数学上保证 ΣQ_pred = 1.0，100% 满足物理守恒约束
+        # 保证 ΣQ_pred = 1.0，满足物理守恒约束
         Q_pred = torch.softmax(logits, dim=-1)
 
         return Q_pred
