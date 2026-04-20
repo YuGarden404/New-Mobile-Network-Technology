@@ -42,7 +42,7 @@ class AQPS_PINN(nn.Module):
         """
         # 形状对齐：将 [N, 4, max_slices] 展平为 [N, 4 * max_slices] = [N, 256]
         x_flat = x.view(x.size(0), -1)
-        features = self.shared_net(x)
+        features = self.shared_net(x_flat)
 
         logits = self.logits_layer(features)
 
