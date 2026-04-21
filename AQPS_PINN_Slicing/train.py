@@ -1,7 +1,5 @@
 import torch
-import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-import numpy as np
 import os
 import time
 import sys
@@ -15,7 +13,6 @@ from pinn_model.networks import AQPS_PINN
 from pinn_model.custom_loss import AQPS_Loss
 
 
-# ================= 1. 数据集加载器 (PyTorch Dataset) =================
 class SlicingDataset(Dataset):
     """
     负责把我们在 dataset_builder.py 里生成的 .pt 文件喂给 GPU
@@ -23,7 +20,7 @@ class SlicingDataset(Dataset):
 
     def __init__(self, data_path,config_path, eta_max_prior=None, psi_max_prior=None):
         if not os.path.exists(data_path):
-            raise FileNotFoundError(f"找不到数据集文件: {data_path}，请先运行 dataset_builder.py")
+            raise FileNotFoundError(f"数据集文件路径错误: {data_path}，请先运行 dataset_builder.py")
 
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
@@ -43,7 +40,7 @@ class SlicingDataset(Dataset):
         if eta_max_prior is not None and psi_max_prior is not None:
             self.eta_max = eta_max_prior
             self.psi_max = psi_max_prior
-            print(f"[归一化参数] (来自训练集) Eta_max: {self.eta_max:.2f} ms, Psi_max: {self.psi_max:.2f}")
+            print(f"[归一化参数] Eta_max: {self.eta_max:.2f} ms, Psi_max: {self.psi_max:.2f}")
         else:
             self.eta_max = X_raw[:, 1, :].max().item() + 1e-5
             self.psi_max = X_raw[:, 3, :].max().item() + 1e-5
@@ -69,11 +66,9 @@ class SlicingDataset(Dataset):
         return self.X[idx], self.Y[idx]
 
 
-# ================= 2. 主训练循环 =================
 def train_model():
-    print(f"\n启动 AQPS-PINN 物理信息神经网络训练模型")
+    print(f"\n启动 AQPS-PINN 神经网络训练模型")
 
-    # --- 基础配置 ---
     config_path = os.path.join(current_dir, "problem_descriptors/slicing_params.json")
     train_data_path = os.path.join(current_dir, "dataset/train_data.pt")
     test_data_path = os.path.join(current_dir, "dataset/test_data.pt")
@@ -82,18 +77,16 @@ def train_model():
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir)
 
-    # --- 超参数设置 ---
+    # 参数设置
     BATCH_SIZE = 64
     EPOCHS = 100
     LEARNING_RATE = 5e-4
     MAX_SLICES = 64
     FINAL_ALPHA = 0.005
 
-    # 自动选择设备 (如果有 NVIDIA 显卡就用 GPU，否则用 CPU)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"训练设备: {device}")
 
-    # --- 加载数据 ---
     train_dataset = SlicingDataset(train_data_path,config_path)
     test_dataset = SlicingDataset(test_data_path,config_path,
                                   eta_max_prior=train_dataset.eta_max,
@@ -102,7 +95,6 @@ def train_model():
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-    # --- 初始化模型与损失函数 ---
     model = AQPS_PINN(max_slices=MAX_SLICES).to(device)
     criterion = AQPS_Loss(
         config_path=config_path,
@@ -110,7 +102,7 @@ def train_model():
         psi_max=train_dataset.psi_max
     ).to(device)
 
-    # 使用 Adam 优化器 (深度学习最经典的自适应优化器)
+    # 使用 Adam 优化器
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)   # 从 1e-5 改为 1e-4 (增强 L2 正则化)
 
     # 学习率调度器：如果连续 5 个 Epoch 验证集 Loss 不下降，就把学习率砍半，帮模型做精细微调
@@ -120,22 +112,19 @@ def train_model():
 
     count_promote = 0
 
-    # ================= 开始纪元 (Epoch) 循环 =================
     start_time = time.time()
 
     for epoch in range(EPOCHS):
-        # 让 alpha_qos 随着 epoch 从 0.001 慢慢线性增长到 1.0
-        # 前期宽容，让模型学 MSE；后期严苛，死守物理底线！
+        # 让 alpha_qos 随着 epoch 从 0.001 慢慢线性增长到 0.005
+        # 前期宽容，让模型学 MSE；后期严格，保证QoS
         current_alpha = 0.001 + (FINAL_ALPHA - 0.0001) * (epoch / EPOCHS)
         criterion.alpha_qos = current_alpha
 
-        # ---------------- [训练阶段] ----------------
-        model.train()  # 开启训练模式 (启用 BatchNorm 和 Dropout)
+        model.train()
         train_total_loss, train_mse, train_qos = 0.0, 0.0, 0.0
 
         for batch_X, batch_Y in train_loader:
             batch_X, batch_Y = batch_X.to(device), batch_Y.to(device)
-
 
             mask_batch = (batch_X[:, 0, :] > 0).float()
 
@@ -163,7 +152,6 @@ def train_model():
         avg_train_mse = train_mse / num_batches
         avg_train_qos = train_qos / num_batches
 
-        # ---------------- [验证阶段] ----------------
         model.eval()
         criterion.alpha_qos = FINAL_ALPHA
         val_total_loss, val_mse, val_qos = 0.0, 0.0, 0.0
@@ -185,10 +173,9 @@ def train_model():
         avg_val_mse = val_mse / len(test_loader)
         avg_val_qos = val_qos / len(test_loader)
 
-        # 触发学习率衰减
+        # 学习率衰减
         scheduler.step(avg_val_loss)
 
-        # ---------------- [日志与保存] ----------------
         # 每 10 个 Epoch 打印一次详细日志
         if (epoch + 1) % 10 == 0 or epoch == 0:
             print(f"\n[Epoch {epoch + 1:03d}/{EPOCHS}]")
@@ -202,7 +189,7 @@ def train_model():
             torch.save(model.state_dict(), os.path.join(checkpoint_dir, "best_aqps_pinn.pth"))
             print(f"[保存] 模型已更新至最低 Valid Loss: {best_val_loss:.4f}")
 
-    # ================= 训练结束 =================
+    # 训练结束
     total_time = (time.time() - start_time) / 60
     print(f"\n训练完成，总耗时: {total_time:.2f} 分钟")
     print(f"优化次数: {count_promote} 次")

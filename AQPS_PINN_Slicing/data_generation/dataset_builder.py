@@ -58,7 +58,7 @@ class DatasetBuilder:
 
                 X_data.append(features.flatten())
                 Y_data.append(labels)
-                # 记录 Gekko 妥协了多少次约束（用于统计观察）
+                # 记录 Gekko 妥协了多少次约束
                 total_constraints_removed += result['constraints_removed']
                 pbar.update(1)
             else:

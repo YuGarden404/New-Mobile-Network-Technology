@@ -1,13 +1,15 @@
 #!/usr/bin/env python
-__author__ = "Pedro Heleno Isolani"
-__copyright__ = "Copyright 2019, QoS-aware WiFi Slicing"
-__license__ = "GPL"
-__version__ = "1.0"
-__maintainer__ = "Pedro Heleno Isolani"
-__email__ = "pedro.isolani@uantwerpen.be"
-__status__ = "Prototype"
+# __author__ = "Pedro Heleno Isolani"
+# __copyright__ = "Copyright 2019, QoS-aware WiFi Slicing"
+# __license__ = "GPL"
+# __version__ = "1.0"
+# __maintainer__ = "Pedro Heleno Isolani"
+# __email__ = "pedro.isolani@uantwerpen.be"
+# __status__ = "Prototype"
+#
+# ''' Python class for solving IEEE 802.11 network slicing problem using gekko non-linear solvers'''
 
-''' Python class for solving IEEE 802.11 network slicing problem using gekko non-linear solvers'''
+# 感谢 Pedro 的开源项目
 
 from gekko import GEKKO
 import numpy as np
@@ -103,7 +105,7 @@ class MathSolver:
         #                             # covergence tolerance
         #                            'minlp_gap_tol 20']
 
-    # 负责对接流水线，并运行原作者的 while 删约束试错逻辑
+    # 运行原作者的 while 删约束试错逻辑
     def solve(self, traffic_data):
         start_time = time.perf_counter()
 
@@ -112,9 +114,8 @@ class MathSolver:
         success = False
         q_opt = None
 
-        # 复原原作者在 main() 函数里的暴力试错逻辑
+        # 复原原作者 Pedro 的暴力试错逻辑
         while not success and qos_constraints_to_remove <= num_slices:
-            # 用 kwargs 关键字传参，防止被原作者的默认参数吃掉
             success, q_opt = self._original_solve(
                 traffic_data=traffic_data,
                 qos_constraints_to_remove=qos_constraints_to_remove
@@ -125,7 +126,6 @@ class MathSolver:
 
         cost_time_ms = (time.perf_counter() - start_time) * 1000.0
 
-        # 返回流水线期待的标准字典格式
         return {
             'success': success,
             'Q_opt': np.array(q_opt) if success else traffic_data['lambdas'] / np.sum(traffic_data['lambdas']),
@@ -133,7 +133,6 @@ class MathSolver:
             'solve_time_ms': cost_time_ms
         }
 
-    # 原作者的一比一物理代码（改名为 original_solve）
     def _original_solve(self,
               num_experiment=0,
               num_slices=0,
@@ -156,10 +155,7 @@ class MathSolver:
             problem_handler.avg_airtimes = [self.avg_airtime] * num_slices
             problem_handler.rb_max_dequeuing_rate = self.rb_max_dequeuing_rate
             problem_handler.min_quantum = self.min_quantum
-            # problem_handler.qos_delay = traffic_data['etas'].tolist()
-            # 将毫秒级的 etas 转换为秒级，以迎合原作者公式的量纲
             problem_handler.qos_delay = (traffic_data['etas'] / 1000.0).tolist()
-            # 提取权重 (原作者代码没这块，但我们需要保留紧急度)
             psis = traffic_data['psis'].tolist()
 
         # Set this to false in case original problem lambdas wanted
@@ -263,7 +259,7 @@ class MathSolver:
 
         try:
             # self.model.solve(disp=True, debug=True)  # Solve
-            # 关闭 disp=True，防止十万次运行刷爆终端屏幕
+            # 关闭 disp，防止刷爆终端
             self.model.solve(disp=False, debug=False)
 
             # for i in range(num_slices):
@@ -284,15 +280,11 @@ class MathSolver:
             success = True
             q_opt = []
 
-            # 删掉原作者的 print，直接提取答案
+            # 删掉原作者的 print，直接获取答案
             for i in range(num_slices):
-                # 提取原作者算出的具体服务率(mu_s)，
-                # 除以基站的总极限容量，得到 PINN 需要的 0~1 的分配比例 (Q)
-                # .value[0] 是从 Gekko 的变量对象中取出具体的浮点数值
                 q_opt.append(mu_s[i].value[0] / problem_handler.rb_max_dequeuing_rate)
 
 
-            # 原作者的求解器不要求最优，只求“可行解”，由于我的算法要求最优，所以删除这部分代码
             # if not objective_function:
             #     sum_of_ts = 0
             # for i in range(num_slices):
@@ -305,11 +297,9 @@ class MathSolver:
             # else:
             #     objective = self.model.options.objfcnval
 
-            # 去掉输出，防止控制台被冲爆
             # print('Objective: ' + str(objective))
             # print('Solve time: ' + str(self.model.options.SOLVETIME))
 
-            # 写文件操作 会在dataset_builder.py中完成
             # experiment_handler.write_results_into_file(num_experiment=num_experiment,
             #                                            num_slices=num_slices,
             #                                            objective=objective,
@@ -319,7 +309,6 @@ class MathSolver:
             #                                            qos_constraints_removed=qos_constraints_to_remove)
             # return True
         except Exception:
-            # 去掉输出，防止控制台被冲爆
             # print("An exception occurred during problem solving!")
             # return False
 
@@ -344,9 +333,7 @@ class MathSolver:
 
 
 
-"""
-以下代码是原作者用来跑他自己毕业论文实验的代码，所以删掉
-"""
+# 以下代码是原作者 Pedro 用来跑他自己毕业论文实验的代码，所以删掉
 # def main():
 #     """
 #         Experiment Options
@@ -487,31 +474,3 @@ class MathSolver:
 #
 #
 # if __name__ == "__main__": main()
-
-
-if __name__ == "__main__":
-    import sys
-    sys.path.append(os.path.join(os.path.dirname(__file__), '../'))
-    from AQPS_PINN_Slicing.data_generation.traffic_simulator import TrafficSimulator
-
-    config_path = os.path.join(os.path.dirname(__file__), "../problem_descriptors/slicing_params.json")
-
-    print("[测试] 启动 100% 源码复刻 Gekko 优化引擎...")
-    simulator = TrafficSimulator(config_path)
-    solver = MathSolver(config_path)
-
-    # 随机生成一张包含 8 个切片的试卷用于测试
-    traffic_data = simulator.generate_dynamic_slices(8)
-    print(f"\n[考卷] 生成 8 个切片，总流量 Σλ = {np.sum(traffic_data['lambdas']):.2f} / {solver.rb_max_dequeuing_rate:.2f}")
-
-    print("\n[解题] Gekko 正在执行原汁原味的非线性自动微分求解 (包含删约束试错)...")
-    result = solver.solve(traffic_data)
-
-    if result['success']:
-        print(f"\n✅ [求解成功] 找到基于原版方程的绝对可行解！")
-        print(f"最优分配比例 (Q_opt): {np.round(result['Q_opt'], 3)}")
-        print(f"删除了 {result['constraints_removed']} 个 QoS 约束才完成求解")
-    else:
-        print(f"\n❌ [彻底崩溃] 删光了所有约束依然无解")
-
-    print(f"求解耗时: {result['solve_time_ms']:.2f} ms")

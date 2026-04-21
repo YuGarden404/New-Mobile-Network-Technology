@@ -18,7 +18,7 @@ class AQPS_PINN(nn.Module):
         # 共享特征提取网络 (多层感知机 MLP)
         self.shared_net = nn.Sequential(
             nn.Linear(input_dim, 512),
-            nn.BatchNorm1d(512),  # 批归一化，加速训练并防止梯度消失
+            nn.BatchNorm1d(512),
             nn.ReLU(),
             nn.Dropout(0.3),    # 从 0.1 改为 0.3，让训练时每次神经元失活 30%
 
@@ -29,9 +29,7 @@ class AQPS_PINN(nn.Module):
 
             nn.Linear(512, 256),
             nn.ReLU()
-        )   # 256 to 512 to 512 to 256 to 64
-
-        # 输出分支：输出原始的资源分配特征值 (Logits)
+        )
         self.logits_layer = nn.Linear(256, max_slices)
 
     def forward(self, x, mask=None):
@@ -51,5 +49,4 @@ class AQPS_PINN(nn.Module):
 
         # 保证 ΣQ_pred = 1.0，满足物理守恒约束
         Q_pred = torch.softmax(logits, dim=-1)
-
         return Q_pred
