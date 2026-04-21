@@ -20,12 +20,12 @@ class AQPS_PINN(nn.Module):
             nn.Linear(input_dim, 512),
             nn.BatchNorm1d(512),  # 批归一化，加速训练并防止梯度消失
             nn.ReLU(),
-            nn.Dropout(0.1),
+            nn.Dropout(0.3),    # 从 0.1 改为 0.3，让训练时每次神经元失活 30%
 
             nn.Linear(512, 512),
             nn.BatchNorm1d(512),
             nn.ReLU(),
-            nn.Dropout(0.1),
+            nn.Dropout(0.3),    # 从 0.1 改为 0.3
 
             nn.Linear(512, 256),
             nn.ReLU()
