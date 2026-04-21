@@ -55,6 +55,10 @@ class AQPS_Loss(nn.Module):
         mu_pred = Q_pred * self.mu_max
         rho_pred = lambdas / (mu_pred + 1e-9)
 
+        # 在 clamp 之前，提取真正的拥挤程度
+        # 即使 rho 被截断，这个张量依然会把梯度传导回 Q_pred
+        rho_violation = torch.relu(rho_pred - 0.95)
+
         # 为了反向传播的稳定性，截断 rho，防止底层数学出现负数或除零爆炸
         rho_safe = torch.clamp(rho_pred, 0.0, 0.95)
 
@@ -77,13 +81,19 @@ class AQPS_Loss(nn.Module):
 
         # --- 5. QoS 感知惩罚计算 ---
         # 只有当 AI 预测的时延 W_pred 超过了容忍度 W_qos_tensor 时，才触发惩罚
-        qos_violation = torch.relu(W_pred - etas)
+        # 【核心修正】：计算相对违约率，将超出的毫秒数除以 etas 本身，变成无量纲的违约比例
+        qos_violation = torch.relu(W_pred - etas) / (etas + 1e-9)
 
         if mask is not None:
-            qos_penalty = torch.sum((urgency * qos_violation) * mask) / valid_elements
+            qos_penalty_term = torch.sum((urgency * qos_violation) * mask) / valid_elements
+            # 同样乘上紧迫性，高优切片如果容量爆表，挨打更重
+            rho_penalty_term = torch.sum((urgency * rho_violation) * mask) / valid_elements
         else:
-            qos_penalty = torch.mean(urgency * qos_violation)
+            qos_penalty_term = torch.mean(urgency * qos_violation)
+            rho_penalty_term = torch.mean(urgency * rho_violation)
 
+        # 总 QoS 惩罚是两者的结合
+        qos_penalty = qos_penalty_term + rho_penalty_term
         # 最终的联合损失函数
         total_loss = mse_loss + self.alpha_qos * qos_penalty
 
