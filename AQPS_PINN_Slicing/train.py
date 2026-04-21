@@ -84,9 +84,10 @@ def train_model():
 
     # --- 超参数设置 ---
     BATCH_SIZE = 64
-    EPOCHS = 450
-    LEARNING_RATE = 1e-3
+    EPOCHS = 100
+    LEARNING_RATE = 5e-4
     MAX_SLICES = 64
+    FINAL_ALPHA = 0.005
 
     # 自动选择设备 (如果有 NVIDIA 显卡就用 GPU，否则用 CPU)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -110,7 +111,7 @@ def train_model():
     ).to(device)
 
     # 使用 Adam 优化器 (深度学习最经典的自适应优化器)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)   # 从 1e-5 改为 1e-4 (增强 L2 正则化)
 
     # 学习率调度器：如果连续 5 个 Epoch 验证集 Loss 不下降，就把学习率砍半，帮模型做精细微调
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=5, factor=0.5)
@@ -123,6 +124,11 @@ def train_model():
     start_time = time.time()
 
     for epoch in range(EPOCHS):
+        # 让 alpha_qos 随着 epoch 从 0.001 慢慢线性增长到 1.0
+        # 前期宽容，让模型学 MSE；后期严苛，死守物理底线！
+        current_alpha = 0.001 + (FINAL_ALPHA - 0.0001) * (epoch / EPOCHS)
+        criterion.alpha_qos = current_alpha
+
         # ---------------- [训练阶段] ----------------
         model.train()  # 开启训练模式 (启用 BatchNorm 和 Dropout)
         train_total_loss, train_mse, train_qos = 0.0, 0.0, 0.0
@@ -159,6 +165,7 @@ def train_model():
 
         # ---------------- [验证阶段] ----------------
         model.eval()
+        criterion.alpha_qos = FINAL_ALPHA
         val_total_loss, val_mse, val_qos = 0.0, 0.0, 0.0
 
         with torch.no_grad():
