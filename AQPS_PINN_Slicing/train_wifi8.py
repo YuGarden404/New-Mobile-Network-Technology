@@ -65,8 +65,8 @@ class SlicingDataset(Dataset):
         return self.X[idx], self.Y[idx]
 
 
-def train_model():
-    print(f"\n启动 AQPS-PINN (Wi-Fi 8 跨层协同版) 神经网络训练模型")
+def train_model(dru_eff_loss):
+    print(f"\n启动 AQPS-PINN (Wi-Fi 8 跨层协同版) 神经网络训练模型  DRU 开销 = {dru_eff_loss * 100:.0f}%")
 
     config_path = os.path.join(current_dir, "problem_descriptors/slicing_params.json")
     train_data_path = os.path.join(current_dir, "dataset/phase2_uhr/train_uhr.pt")
@@ -98,7 +98,8 @@ def train_model():
     criterion = AQPS_Loss_WiFi8(
         config_path=config_path,
         eta_max=train_dataset.eta_max,
-        psi_max=train_dataset.psi_max
+        psi_max=train_dataset.psi_max,
+        dru_efficiency_loss=dru_eff_loss,
     ).to(device)
 
     # 使用 Adam 优化器
@@ -176,7 +177,8 @@ def train_model():
         if avg_val_loss < best_val_loss:
             count_promote+=1
             best_val_loss = avg_val_loss
-            torch.save(model.state_dict(), os.path.join(checkpoint_dir, "best_aqps_pinn_wifi8.pth"))
+            model_filename = f"best_aqps_pinn_wifi8_dru{int(dru_eff_loss * 100)}.pth"
+            torch.save(model.state_dict(), os.path.join(checkpoint_dir, model_filename))
             print(f"[保存] 模型已更新至最低 Valid Loss: {best_val_loss:.4f}")
 
     # 训练结束
@@ -191,4 +193,7 @@ def train_model():
 
 if __name__ == "__main__":
     os.system('cls' if os.name == 'nt' else 'clear')
-    train_model()
+    dru_losses_to_test = [0.10, 0.15, 0.20]
+    for dl in dru_losses_to_test:
+        train_model(dl)
+    print("\n三个敏感度模型已全部训练完毕")

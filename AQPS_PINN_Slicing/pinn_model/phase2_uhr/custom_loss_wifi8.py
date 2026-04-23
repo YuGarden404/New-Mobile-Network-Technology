@@ -10,7 +10,7 @@ class AQPS_Loss_WiFi8(nn.Module):
     引入了 DRU/CRU 的物理信道容量模型，实现物理法则引导的弱监督学习
     """
 
-    def __init__(self, config_path,eta_max,psi_max):
+    def __init__(self, config_path,eta_max,psi_max, dru_efficiency_loss=0.10):
         super(AQPS_Loss_WiFi8, self).__init__()
         if not os.path.exists(config_path):
             raise FileNotFoundError(f"配置文件路径错误: {config_path}")
@@ -34,8 +34,7 @@ class AQPS_Loss_WiFi8(nn.Module):
         # 根据 IEEE 802.11ax/be 中关于分布式交织（Interleaved / Distributed OFDMA）的早期研究
         # 将连续子载波打散后，为了维持相同的误码率（BER）
         # 物理层头部（PHY Header）和导频的开销通常会增加 10% 到 15%
-        self.dru_efficiency_loss = 0.10  # 损失 10%，效率乘数为 0.9
-        """需要分别按照0.10，0.15，0.20分别跑3次"""
+        self.dru_efficiency_loss = dru_efficiency_loss  # 可能为0.10 0.15 0.20
 
         # 频率分集增益因子 (Frequency Diversity Factor)
         # 越小代表 DRU 抗干扰能力越强
